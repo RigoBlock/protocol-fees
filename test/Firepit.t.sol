@@ -24,10 +24,11 @@ contract FirepitTest is ProtocolFeesTestBase {
 
     vm.startPrank(alice);
     resource.approve(address(firepit), INITIAL_TOKEN_AMOUNT);
-    firepit.release(firepit.nonce(), releaseMockToken, alice);
+    firepit.release(firepit.nonce(), releaseMockToken, alice, type(uint256).max);
 
-    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT);
-    assertEq(mockToken.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
+    assertEq(mockToken.balanceOf(address(tokenJar)), 1);
     assertEq(resource.balanceOf(alice), 0);
     assertEq(resource.balanceOf(address(firepit)), 0);
     assertEq(resource.balanceOf(address(0xdead)), firepit.threshold());
@@ -40,9 +41,10 @@ contract FirepitTest is ProtocolFeesTestBase {
 
     vm.startPrank(alice);
     resource.approve(address(firepit), INITIAL_TOKEN_AMOUNT);
-    firepit.release(firepit.nonce(), releaseMockNative, alice);
+    firepit.release(firepit.nonce(), releaseMockNative, alice, type(uint256).max);
 
-    assertEq(CurrencyLibrary.ADDRESS_ZERO.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(CurrencyLibrary.ADDRESS_ZERO.balanceOf(address(tokenJar)), 1);
     assertEq(resource.balanceOf(alice), 0);
     assertEq(resource.balanceOf(address(firepit)), 0);
     assertEq(resource.balanceOf(address(0xdead)), firepit.threshold());
@@ -63,7 +65,7 @@ contract FirepitTest is ProtocolFeesTestBase {
     vm.startPrank(alice);
     resource.approve(address(firepit), type(uint256).max);
     vm.expectRevert(); // reverts on token insufficient allowance
-    firepit.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice);
+    firepit.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice, type(uint256).max);
   }
 
   function test_fuzz_revert_release_invalid_nonce(uint256 nonce, uint256 seed) public {
@@ -72,7 +74,7 @@ contract FirepitTest is ProtocolFeesTestBase {
     vm.startPrank(alice);
     resource.approve(address(firepit), type(uint256).max);
     vm.expectRevert(INonce.InvalidNonce.selector);
-    firepit.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice);
+    firepit.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice, type(uint256).max);
   }
 
   /// @dev test that two transactions with the same nonce, the second one should revert
@@ -83,16 +85,17 @@ contract FirepitTest is ProtocolFeesTestBase {
     resource.approve(address(firepit), type(uint256).max);
 
     // First release call
-    firepit.release(nonce, releaseMockToken, alice);
-    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT);
-    assertEq(mockToken.balanceOf(address(tokenJar)), 0);
+    firepit.release(nonce, releaseMockToken, alice, type(uint256).max);
+    // TokenJar leaves 1 wei
+    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
+    assertEq(mockToken.balanceOf(address(tokenJar)), 1);
     assertEq(resource.balanceOf(alice), 0);
     assertEq(resource.balanceOf(address(firepit)), 0);
     assertEq(resource.balanceOf(address(0xdead)), INITIAL_TOKEN_AMOUNT);
 
     // Attempt to frontrun with the same nonce
     vm.expectRevert(INonce.InvalidNonce.selector);
-    firepit.release(nonce, releaseMockToken, alice);
+    firepit.release(nonce, releaseMockToken, alice, type(uint256).max);
   }
 
   /// @dev on a single chain releaser, malicious tokens will hard revert
@@ -102,7 +105,7 @@ contract FirepitTest is ProtocolFeesTestBase {
     resource.approve(address(firepit), type(uint256).max);
 
     vm.expectRevert();
-    firepit.release(nonce, releaseMockReverting, alice);
+    firepit.release(nonce, releaseMockReverting, alice, type(uint256).max);
   }
 
   function test_fuzz_setThresholdSetter(address caller, address newSetter) public {
@@ -123,9 +126,14 @@ contract FirepitTest is ProtocolFeesTestBase {
 
   function test_fuzz_newThreshold(uint256 newThreshold) public {
     vm.assume(newThreshold != firepit.threshold());
+    // Bound to realistic values - must be >= min threshold for test to make sense
+    newThreshold = bound(newThreshold, 1e18, 10_000e18);
 
     vm.prank(owner);
     firepit.setThreshold(newThreshold);
+
+    // Warp far enough that currentThreshold() returns the minimum threshold
+    vm.warp(block.timestamp + 100_000_000);
 
     deal(address(resource), alice, newThreshold);
 
@@ -137,7 +145,7 @@ contract FirepitTest is ProtocolFeesTestBase {
 
     vm.startPrank(alice);
     resource.approve(address(firepit), newThreshold);
-    firepit.release(currentNonce, releaseMockBoth, alice);
+    firepit.release(currentNonce, releaseMockBoth, alice, type(uint256).max);
 
     assertEq(firepit.nonce(), currentNonce + 1);
     assertEq(resource.balanceOf(alice), 0);
@@ -154,6 +162,6 @@ contract FirepitTest is ProtocolFeesTestBase {
     uint256 nonce = firepit.nonce();
 
     vm.expectRevert(IReleaser.TooManyAssets.selector);
-    firepit.release(nonce, assets, alice);
+    firepit.release(nonce, assets, alice, type(uint256).max);
   }
 }

@@ -9,7 +9,7 @@ import {ITokenJar} from "./interfaces/ITokenJar.sol";
 /// @notice A singular destination for protocol fees
 /// @dev Fees accumulate passively in this contract from external sources.
 ///      Stored fees can be released by an authorized releaser contract.
-/// @custom:security-contact security@uniswap.org
+/// @custom:security-contact security@rigoblock.com
 contract TokenJar is Owned, ITokenJar {
   /// @inheritdoc ITokenJar
   address public releaser;
@@ -32,7 +32,8 @@ contract TokenJar is Owned, ITokenJar {
     for (uint256 i; i < assets.length; i++) {
       asset = assets[i];
       amount = asset.balanceOfSelf();
-      if (amount > 0) asset.transfer(recipient, amount);
+      // Leave 1 wei to avoid clearing storage slot and potential griefing vectors
+      if (amount > 1) asset.transfer(recipient, amount - 1);
     }
   }
 

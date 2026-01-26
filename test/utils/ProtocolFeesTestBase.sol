@@ -70,6 +70,11 @@ contract ProtocolFeesTestBase is Test {
 
     vm.stopPrank();
 
+    // Warp time forward so threshold decays from INITIAL_THRESHOLD (100M) to below INITIAL_TOKEN_AMOUNT (1000)
+    // Using quadratic decay: threshold = 100M * 8640² / (8640² + elapsed²)
+    // For threshold < 1000: we need enough time for threshold to be at most 999.9e18
+    vm.warp(block.timestamp + 2_740_000);
+
     // Supply tokens to the TokenJar
     mockToken.mint(address(tokenJar), INITIAL_TOKEN_AMOUNT);
     revertingToken.mint(address(tokenJar), INITIAL_TOKEN_AMOUNT);

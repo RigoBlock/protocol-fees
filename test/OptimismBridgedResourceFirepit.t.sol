@@ -99,6 +99,11 @@ contract OptimismBridgedResourceFirepitTest is Test {
     vm.deal(address(tokenJar), INITIAL_NATIVE_AMOUNT);
     vm.deal(alice, INITIAL_NATIVE_AMOUNT);
     vm.deal(bob, INITIAL_NATIVE_AMOUNT);
+
+    // Warp time forward so threshold decays from INITIAL_THRESHOLD (100M) to below INITIAL_THRESHOLD (100)
+    // Using quadratic decay: threshold = 100M * 8640² / (8640² + elapsed²)
+    // For threshold ≈ 100: elapsed ≈ 8640000 seconds (≈100 days)
+    vm.warp(block.timestamp + 8_640_000);
   }
 
   function test_constructor() public view {
@@ -127,7 +132,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
       address(resource), address(firepit), address(0xdead), INITIAL_THRESHOLD, 100_000, ""
     );
 
-    firepit.release(nonceBefore, releaseTokens, alice);
+    firepit.release(nonceBefore, releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
 
     // Check resource was transferred from alice to bridge
@@ -135,9 +140,9 @@ contract OptimismBridgedResourceFirepitTest is Test {
     assertEq(resource.balanceOf(address(firepit)), 0);
     assertEq(resource.balanceOf(Predeploys.L2_STANDARD_BRIDGE), INITIAL_THRESHOLD);
 
-    // Check mock token was released to alice
-    assertEq(mockToken.balanceOf(alice), aliceTokenBefore + INITIAL_TOKEN_AMOUNT);
-    assertEq(mockToken.balanceOf(address(tokenJar)), 0);
+    // Check mock token was released to alice (TokenJar leaves 1 wei)
+    assertEq(mockToken.balanceOf(alice), aliceTokenBefore + INITIAL_TOKEN_AMOUNT - 1);
+    assertEq(mockToken.balanceOf(address(tokenJar)), 1);
 
     // Check nonce was incremented
     assertEq(firepit.nonce(), nonceBefore + 1);
@@ -153,12 +158,12 @@ contract OptimismBridgedResourceFirepitTest is Test {
 
     Currency[] memory releaseNative = new Currency[](1);
     releaseNative[0] = CurrencyLibrary.ADDRESS_ZERO;
-    firepit.release(nonceBefore, releaseNative, bob);
+    firepit.release(nonceBefore, releaseNative, bob, type(uint256).max);
     vm.stopPrank();
 
-    // Check native currency was released
-    assertEq(bob.balance, bobNativeBefore + tokenJarNativeBefore);
-    assertEq(address(tokenJar).balance, 0);
+    // Check native currency was released (TokenJar leaves 1 wei)
+    assertEq(bob.balance, bobNativeBefore + tokenJarNativeBefore - 1);
+    assertEq(address(tokenJar).balance, 1);
 
     // Check nonce was incremented
     assertEq(firepit.nonce(), nonceBefore + 1);
@@ -176,14 +181,14 @@ contract OptimismBridgedResourceFirepitTest is Test {
     Currency[] memory releaseBoth = new Currency[](2);
     releaseBoth[0] = Currency.wrap(address(mockToken));
     releaseBoth[1] = CurrencyLibrary.ADDRESS_ZERO;
-    firepit.release(nonceBefore, releaseBoth, alice);
+    firepit.release(nonceBefore, releaseBoth, alice, type(uint256).max);
     vm.stopPrank();
 
-    // Check both token and native were released
-    assertEq(mockToken.balanceOf(alice), aliceTokenBefore + INITIAL_TOKEN_AMOUNT);
-    assertEq(alice.balance, aliceNativeBefore + tokenJarNativeBefore);
-    assertEq(mockToken.balanceOf(address(tokenJar)), 0);
-    assertEq(address(tokenJar).balance, 0);
+    // Check both token and native were released (TokenJar leaves 1 wei each)
+    assertEq(mockToken.balanceOf(alice), aliceTokenBefore + INITIAL_TOKEN_AMOUNT - 1);
+    assertEq(alice.balance, aliceNativeBefore + tokenJarNativeBefore - 1);
+    assertEq(mockToken.balanceOf(address(tokenJar)), 1);
+    assertEq(address(tokenJar).balance, 1);
 
     // Check nonce was incremented
     assertEq(firepit.nonce(), nonceBefore + 1);
@@ -197,7 +202,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
     releaseTokens[0] = Currency.wrap(address(mockToken));
     uint256 wrongNonce = firepit.nonce() + 1;
     vm.expectRevert(INonce.InvalidNonce.selector);
-    firepit.release(wrongNonce, releaseTokens, alice);
+    firepit.release(wrongNonce, releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
   }
 
@@ -212,7 +217,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
     Currency[] memory releaseTokens = new Currency[](1);
     releaseTokens[0] = Currency.wrap(address(mockToken));
     vm.expectRevert(address(resource));
-    firepit.release(0, releaseTokens, alice);
+    firepit.release(0, releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
   }
 
@@ -223,7 +228,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
     Currency[] memory releaseTokens = new Currency[](1);
     releaseTokens[0] = Currency.wrap(address(mockToken));
     vm.expectRevert(address(resource));
-    firepit.release(0, releaseTokens, alice);
+    firepit.release(0, releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
   }
 
@@ -248,7 +253,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
       address(resource), address(firepit), address(0xdead), newThreshold, 100_000, ""
     );
 
-    firepit.release(firepit.nonce(), releaseTokens, alice);
+    firepit.release(firepit.nonce(), releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
 
     // Check correct amount was withdrawn to bridge
@@ -298,23 +303,31 @@ contract OptimismBridgedResourceFirepitTest is Test {
     // First release
     vm.startPrank(alice);
     resource.approve(address(firepit), INITIAL_THRESHOLD * 3);
-    firepit.release(initialNonce, releaseTokens, alice);
+    firepit.release(initialNonce, releaseTokens, alice, type(uint256).max);
     assertEq(firepit.nonce(), initialNonce + 1);
+    vm.stopPrank();
 
     // Mint more tokens to alice
     mockToken.mint(address(tokenJar), INITIAL_TOKEN_AMOUNT);
 
+    // Warp time for threshold to decay again after reset
+    vm.warp(block.timestamp + 8_640_000);
+
     // Second release with incremented nonce
-    firepit.release(initialNonce + 1, releaseTokens, alice);
+    vm.prank(alice);
+    firepit.release(initialNonce + 1, releaseTokens, alice, type(uint256).max);
     assertEq(firepit.nonce(), initialNonce + 2);
 
     // Mint more tokens to alice
     mockToken.mint(address(tokenJar), INITIAL_TOKEN_AMOUNT);
 
+    // Warp time for threshold to decay again after reset
+    vm.warp(block.timestamp + 8_640_000);
+
     // Third release
-    firepit.release(initialNonce + 2, releaseTokens, alice);
+    vm.prank(alice);
+    firepit.release(initialNonce + 2, releaseTokens, alice, type(uint256).max);
     assertEq(firepit.nonce(), initialNonce + 3);
-    vm.stopPrank();
   }
 
   function test_revert_release_reusedNonce() public {
@@ -325,11 +338,11 @@ contract OptimismBridgedResourceFirepitTest is Test {
     // First release succeeds
     vm.startPrank(alice);
     resource.approve(address(firepit), INITIAL_THRESHOLD * 2);
-    firepit.release(currentNonce, releaseTokens, alice);
+    firepit.release(currentNonce, releaseTokens, alice, type(uint256).max);
 
     // Second release with same nonce fails
     vm.expectRevert(INonce.InvalidNonce.selector);
-    firepit.release(currentNonce, releaseTokens, alice);
+    firepit.release(currentNonce, releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
   }
 
@@ -341,11 +354,11 @@ contract OptimismBridgedResourceFirepitTest is Test {
     // Alice initiates release to bob
     vm.startPrank(alice);
     resource.approve(address(firepit), INITIAL_THRESHOLD);
-    firepit.release(nonceBefore, releaseTokens, bob);
+    firepit.release(nonceBefore, releaseTokens, bob, type(uint256).max);
     vm.stopPrank();
 
-    // Check bob received the tokens
-    assertEq(mockToken.balanceOf(bob), INITIAL_TOKEN_AMOUNT);
+    // Check bob received the tokens (TokenJar leaves 1 wei)
+    assertEq(mockToken.balanceOf(bob), INITIAL_TOKEN_AMOUNT - 1);
     assertEq(mockToken.balanceOf(alice), 0);
   }
 
@@ -355,6 +368,9 @@ contract OptimismBridgedResourceFirepitTest is Test {
     // Set new threshold
     vm.prank(thresholdSetter);
     firepit.setThreshold(thresholdAmount);
+
+    // Warp far enough that currentThreshold() returns the minimum threshold
+    vm.warp(block.timestamp + 100_000_000);
 
     Currency[] memory releaseTokens = new Currency[](1);
     releaseTokens[0] = Currency.wrap(address(mockToken));
@@ -369,7 +385,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
       address(resource), address(firepit), address(0xdead), thresholdAmount, 100_000, ""
     );
 
-    firepit.release(firepit.nonce(), releaseTokens, alice);
+    firepit.release(firepit.nonce(), releaseTokens, alice, type(uint256).max);
     vm.stopPrank();
 
     // Verify correct amount was withdrawn to bridge
@@ -395,13 +411,13 @@ contract OptimismBridgedResourceFirepitTest is Test {
     // Release all assets
     vm.startPrank(alice);
     resource.approve(address(firepit), INITIAL_THRESHOLD);
-    firepit.release(firepit.nonce(), assets, alice);
+    firepit.release(firepit.nonce(), assets, alice, type(uint256).max);
     vm.stopPrank();
 
-    // Verify all tokens were released
+    // Verify all tokens were released (TokenJar leaves 1 wei each)
     for (uint8 i = 0; i < numAssets; i++) {
-      assertEq(tokens[i].balanceOf(alice), INITIAL_TOKEN_AMOUNT);
-      assertEq(tokens[i].balanceOf(address(tokenJar)), 0);
+      assertEq(tokens[i].balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
+      assertEq(tokens[i].balanceOf(address(tokenJar)), 1);
     }
   }
 
@@ -418,7 +434,7 @@ contract OptimismBridgedResourceFirepitTest is Test {
       address(resource), address(firepit), address(0xdead), INITIAL_THRESHOLD, 100_000, ""
     );
 
-    firepit.release(nonceBefore, emptyAssets, alice);
+    firepit.release(nonceBefore, emptyAssets, alice, type(uint256).max);
     vm.stopPrank();
 
     // Check resource was still transferred to bridge

@@ -22,6 +22,9 @@ contract ExchangeReleaserTest is ProtocolFeesTestBase {
     tokenJar.setReleaser(address(swapReleaser));
     swapReleaser.setThresholdSetter(owner);
     vm.stopPrank();
+
+    // Warp time forward so threshold decays to below INITIAL_TOKEN_AMOUNT
+    vm.warp(block.timestamp + 2_740_000);
   }
 
   function test_release_release_erc20() public {
@@ -36,10 +39,11 @@ contract ExchangeReleaserTest is ProtocolFeesTestBase {
     vm.expectEmit(true, true, false, true, address(swapReleaser));
     emit IReleaser.Released(swapReleaser.nonce(), alice, releaseMockToken);
 
-    swapReleaser.release(swapReleaser.nonce(), releaseMockToken, alice);
+    swapReleaser.release(swapReleaser.nonce(), releaseMockToken, alice, type(uint256).max);
 
-    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT);
-    assertEq(mockToken.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
+    assertEq(mockToken.balanceOf(address(tokenJar)), 1);
     assertEq(resource.balanceOf(alice), 0);
     assertEq(resource.balanceOf(address(swapReleaser)), 0);
     assertEq(resource.balanceOf(recipient), swapReleaser.threshold());
@@ -57,9 +61,10 @@ contract ExchangeReleaserTest is ProtocolFeesTestBase {
     vm.expectEmit(true, true, false, true, address(swapReleaser));
     emit IReleaser.Released(swapReleaser.nonce(), alice, releaseMockNative);
 
-    swapReleaser.release(swapReleaser.nonce(), releaseMockNative, alice);
+    swapReleaser.release(swapReleaser.nonce(), releaseMockNative, alice, type(uint256).max);
 
-    assertEq(CurrencyLibrary.ADDRESS_ZERO.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(CurrencyLibrary.ADDRESS_ZERO.balanceOf(address(tokenJar)), 1);
     assertEq(resource.balanceOf(alice), 0);
     assertEq(resource.balanceOf(address(swapReleaser)), 0);
     assertEq(resource.balanceOf(recipient), swapReleaser.threshold());
@@ -79,7 +84,7 @@ contract ExchangeReleaserTest is ProtocolFeesTestBase {
     vm.startPrank(alice);
     resource.approve(address(swapReleaser), type(uint256).max);
     vm.expectRevert(); // reverts on token insufficient allowance
-    swapReleaser.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice);
+    swapReleaser.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice, type(uint256).max);
   }
 
   function test_fuzz_revert_release_invalid_nonce(uint256 nonce, uint256 seed) public {
@@ -88,7 +93,7 @@ contract ExchangeReleaserTest is ProtocolFeesTestBase {
     vm.startPrank(alice);
     resource.approve(address(swapReleaser), type(uint256).max);
     vm.expectRevert(INonce.InvalidNonce.selector);
-    swapReleaser.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice);
+    swapReleaser.release(nonce, fuzzReleaseAny[seed % fuzzReleaseAny.length], alice, type(uint256).max);
   }
 
   /// @dev test that two transactions with the same nonce, the second one should revert
@@ -102,15 +107,16 @@ contract ExchangeReleaserTest is ProtocolFeesTestBase {
     vm.expectEmit(true, true, false, true, address(swapReleaser));
     emit IReleaser.Released(nonce, alice, releaseMockToken);
 
-    swapReleaser.release(nonce, releaseMockToken, alice);
-    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT);
-    assertEq(mockToken.balanceOf(address(tokenJar)), 0);
+    swapReleaser.release(nonce, releaseMockToken, alice, type(uint256).max);
+    // TokenJar leaves 1 wei
+    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
+    assertEq(mockToken.balanceOf(address(tokenJar)), 1);
     assertEq(resource.balanceOf(alice), 0);
     assertEq(resource.balanceOf(address(swapReleaser)), 0);
     assertEq(resource.balanceOf(recipient), INITIAL_TOKEN_AMOUNT);
 
     // Attempt to frontrun with the same nonce
     vm.expectRevert(INonce.InvalidNonce.selector);
-    swapReleaser.release(nonce, releaseMockToken, alice);
+    swapReleaser.release(nonce, releaseMockToken, alice, type(uint256).max);
   }
 }

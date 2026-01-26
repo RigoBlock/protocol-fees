@@ -38,7 +38,8 @@ contract OptimismBridgedResourceFirepit is ExchangeReleaser {
   {}
 
   /// @notice Hook called after assets are released - initiates stage 2 withdrawal to L1
-  function _afterRelease(Currency[] calldata, address) internal override {
+  /// @param thresholdPaid The amount of resource tokens that were transferred
+  function _afterRelease(Currency[] calldata, address, uint256 thresholdPaid) internal override {
     // Stage 2: Initiate bridge withdrawal to L1 burn address
     // The bridge will:
     // 1. Burn the L2 tokens held by this contract
@@ -46,7 +47,7 @@ contract OptimismBridgedResourceFirepit is ExchangeReleaser {
     // 3. After challenge period, transfer underlying resource tokens to 0xdead on L1
     IL2StandardBridge(Predeploys.L2_STANDARD_BRIDGE)
       .withdrawTo(
-        address(RESOURCE), L1_RESOURCE_RECIPIENT, threshold, WITHDRAWAL_MIN_GAS, bytes("")
+        address(RESOURCE), L1_RESOURCE_RECIPIENT, thresholdPaid, WITHDRAWAL_MIN_GAS, bytes("")
       );
   }
 }

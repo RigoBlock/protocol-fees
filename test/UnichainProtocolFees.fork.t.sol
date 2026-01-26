@@ -90,7 +90,7 @@ contract UnichainProtocolFeesForkTest is Test {
 
     vm.startPrank(caller);
     IERC20(RESOURCE).approve(address(releaser), THRESHOLD);
-    releaser.release(_nonce, currencies, address(0x5678));
+    releaser.release(_nonce, currencies, address(0x5678), type(uint256).max);
     vm.stopPrank();
 
     // Verify ETH transferred from TokenJar to recipient
@@ -132,7 +132,7 @@ contract UnichainProtocolFeesForkTest is Test {
       IERC20(RESOURCE).approve(address(releaser), THRESHOLD);
 
       uint256 recipientBalanceBefore = callers[i].balance;
-      releaser.release(_nonce, currencies, callers[i]);
+      releaser.release(_nonce, currencies, callers[i], type(uint256).max);
 
       // Verify release
       assertEq(callers[i].balance - recipientBalanceBefore, feeAmount, "Incorrect ETH released");
@@ -201,7 +201,7 @@ contract UnichainProtocolFeesForkTest is Test {
 
     // Should revert due to insufficient UNI
     vm.expectRevert(RESOURCE);
-    releaser.release(_nonce, currencies, caller);
+    releaser.release(_nonce, currencies, caller, type(uint256).max);
     vm.stopPrank();
   }
 

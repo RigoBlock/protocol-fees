@@ -289,7 +289,7 @@ contract ProtocolFeesForkTest is Test {
 
     vm.startPrank(caller);
     IERC20(deployer.RESOURCE()).approve(address(releaser), releaser.threshold());
-    releaser.release(_nonce, currencies, recipient);
+    releaser.release(_nonce, currencies, recipient, type(uint256).max);
     vm.stopPrank();
 
     // amounts transferred from the token jar to the recipient
@@ -320,7 +320,7 @@ contract ProtocolFeesForkTest is Test {
 
     vm.startPrank(caller);
     IERC20(deployer.RESOURCE()).approve(address(releaser), releaser.threshold());
-    releaser.release(_nonce, currencies, recipient);
+    releaser.release(_nonce, currencies, recipient, type(uint256).max);
     vm.stopPrank();
 
     // amounts transferred from the token jar to the recipient

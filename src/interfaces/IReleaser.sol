@@ -10,6 +10,9 @@ interface IReleaser is IResourceManager, INonce {
   /// @notice Thrown when attempting to release too many assets at once
   error TooManyAssets();
 
+  /// @notice Thrown when the current threshold exceeds the caller's maximum
+  error ThresholdExceedsMax();
+
   event Released(uint256 indexed nonce, address indexed recipient, Currency[] assets);
 
   /// @return Address of the Token Jar contract that will release the assets
@@ -20,5 +23,14 @@ interface IReleaser is IResourceManager, INonce {
   /// @param assets The list of assets (addresses) to release, which may have length limits
   /// Native tokens (Ether) are represented as the zero address
   /// @param recipient The address to receive the released assets, paid out by Token Jar
-  function release(uint256 _nonce, Currency[] calldata assets, address recipient) external;
+  /// @param maxResourceAmount The maximum amount of resource tokens the caller is willing to pay
+  /// @return thresholdPaid The actual amount of resource tokens transferred
+  function release(uint256 _nonce, Currency[] calldata assets, address recipient, uint256 maxResourceAmount)
+    external
+    returns (uint256 thresholdPaid);
+
+  /// @notice Returns the current threshold for releasing assets
+  /// @dev May implement dynamic thresholds (e.g., time-decaying reverse Dutch auction)
+  /// @return The current threshold amount of resource tokens required
+  function currentThreshold() external view returns (uint256);
 }

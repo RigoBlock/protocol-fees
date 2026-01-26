@@ -58,8 +58,9 @@ contract TokenJarTest is Test {
     // Use releaser contract to release assets
     mockReleaser.release(asset, alice);
 
-    assertEq(mockToken.balanceOf(alice), initialBalance);
-    assertEq(asset.balanceOf(address(tokenJar)), 0);
+    // TokenJar now leaves 1 wei to avoid clearing storage slot
+    assertEq(mockToken.balanceOf(alice), initialBalance - 1);
+    assertEq(asset.balanceOf(address(tokenJar)), 1);
   }
 
   function test_Release_ERC20_ZeroBalance() public {
@@ -84,18 +85,19 @@ contract TokenJarTest is Test {
   function test_Release_ERC20_ToZeroAddress() public {
     Currency asset = Currency.wrap(address(mockToken));
     mockReleaser.release(asset, address(0));
-    assertEq(mockToken.balanceOf(address(0)), INITIAL_TOKEN_AMOUNT);
+    // TokenJar leaves 1 wei
+    assertEq(mockToken.balanceOf(address(0)), INITIAL_TOKEN_AMOUNT - 1);
   }
 
   function test_Release_ERC20_MultipleCalls() public {
     Currency asset = Currency.wrap(address(mockToken));
-    // First release
+    // First release (leaves 1 wei)
     mockReleaser.release(asset, alice);
-    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT);
+    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
 
-    // Second release should do nothing
+    // Second release should do nothing (only 1 wei left, not > 1)
     mockReleaser.release(asset, alice);
-    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT);
+    assertEq(mockToken.balanceOf(alice), INITIAL_TOKEN_AMOUNT - 1);
   }
 
   function test_Release_Native_Success() public {
@@ -105,19 +107,21 @@ contract TokenJarTest is Test {
 
     mockReleaser.release(nativeAsset, alice);
 
-    assertEq(alice.balance, aliceInitialBalance + initialBalance);
-    assertEq(nativeAsset.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(alice.balance, aliceInitialBalance + initialBalance - 1);
+    assertEq(nativeAsset.balanceOf(address(tokenJar)), 1);
   }
 
   function test_Release_Native_ZeroBalance() public {
     Currency nativeAsset = Currency.wrap(address(0));
-    // Drain the TokenJar first
+    // Drain the TokenJar first (leaves 1 wei)
     mockReleaser.release(nativeAsset, alice);
 
-    // Should not emit event or revert
+    // Should not emit event or revert (only 1 wei left, not > 1)
     mockReleaser.release(nativeAsset, alice);
 
-    assertEq(nativeAsset.balanceOf(address(tokenJar)), 0);
+    // 1 wei remains
+    assertEq(nativeAsset.balanceOf(address(tokenJar)), 1);
   }
 
   function test_Release_Native_OnlyReleaser() public {
@@ -142,8 +146,9 @@ contract TokenJarTest is Test {
     vm.prank(alice);
     mockReleaser.releaseToCaller(asset);
 
-    assertEq(mockToken.balanceOf(alice), initialBalance);
-    assertEq(asset.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(mockToken.balanceOf(alice), initialBalance - 1);
+    assertEq(asset.balanceOf(address(tokenJar)), 1);
   }
 
   function test_setReleaser() public {
@@ -166,7 +171,7 @@ contract TokenJarTest is Test {
     //////////////////////////////////////////////////////////////*/
 
   function testFuzz_Release_ERC20_DifferentAmounts(uint256 amount) public {
-    vm.assume(amount > 0 && amount <= type(uint128).max);
+    vm.assume(amount > 1 && amount <= type(uint128).max);
 
     // Create new token and mint specific amount
     MockERC20 fuzzToken = new MockERC20("FuzzToken", "FUZZ", 18);
@@ -175,12 +180,13 @@ contract TokenJarTest is Test {
 
     mockReleaser.release(asset, alice);
 
-    assertEq(fuzzToken.balanceOf(alice), amount);
-    assertEq(asset.balanceOf(address(tokenJar)), 0);
+    // TokenJar leaves 1 wei
+    assertEq(fuzzToken.balanceOf(alice), amount - 1);
+    assertEq(asset.balanceOf(address(tokenJar)), 1);
   }
 
   function testFuzz_Release_Native_DifferentAmounts(uint256 amount) public {
-    vm.assume(amount > 0 && amount <= 1000 ether);
+    vm.assume(amount > 1 && amount <= 1000 ether);
 
     // Create new TokenJar with releaser
     vm.startPrank(owner);
@@ -195,8 +201,9 @@ contract TokenJarTest is Test {
     uint256 aliceInitialBalance = alice.balance;
     fuzzReleaser.release(nativeAsset, alice);
 
-    assertEq(alice.balance, aliceInitialBalance + amount);
-    assertEq(address(fuzzTokenJar).balance, 0);
+    // TokenJar leaves 1 wei
+    assertEq(alice.balance, aliceInitialBalance + amount - 1);
+    assertEq(address(fuzzTokenJar).balance, 1);
   }
 
   function testFuzz_OnlyReleaser_DifferentCallers(address caller) public {
